@@ -1,0 +1,105 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.example.chat</groupId>
+    <artifactId>java-chat</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>Java Redis Chat Application</name>
+    <description>A chat application using Java with Redis (Lettuce, RedisJSON, RediSearch).</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>11</maven.compiler.source> <!-- Or 17 -->
+        <maven.compiler.target>11</maven.compiler.target> <!-- Or 17 -->
+        <lettuce.version>6.3.2.RELEASE</lettuce.version> <!-- Replace with latest -->
+        <jredisjson.version>1.5.0</jredisjson.version>     <!-- Replace with latest -->
+        <jredisearch.version>2.9.0</jredisearch.version>   <!-- Replace with latest -->
+        <slf4j.version>2.0.13</slf4j.version>           <!-- Replace with latest -->
+        <junit.jupiter.version>5.10.2</junit.jupiter.version>   <!-- Replace with latest -->
+        <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
+        <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
+    </properties>
+
+    <dependencies>
+        <!-- Lettuce Core: Advanced Java Redis client -->
+        <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+            <version>${lettuce.version}</version>
+        </dependency>
+
+        <!-- JRedisJSON: Client for RedisJSON module -->
+        <dependency>
+            <groupId>com.redislabs</groupId>
+            <artifactId>jredisjson</artifactId>
+            <version>${jredisjson.version}</version>
+        </dependency>
+
+        <!-- JRediSearch: Client for RediSearch module -->
+        <!-- Note: JRediSearch often depends on Jedis. Lettuce is primary client here,
+             but JRediSearch might be used specifically for its search client features if needed.
+             If direct Lettuce RediSearch commands are sufficient, this might be optional or replaced.
+             For now, including as requested. -->
+        <dependency>
+            <groupId>com.redislabs</groupId>
+            <artifactId>jredisearch</artifactId>
+            <version>${jredisearch.version}</version>
+        </dependency>
+
+        <!-- SLF4J API: Logging facade -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+
+        <!-- SLF4J Simple Binding: Basic console logger for SLF4J -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>runtime</scope> <!-- Usually runtime or test scope -->
+        </dependency>
+
+        <!-- JUnit Jupiter API: For writing tests -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>${junit.jupiter.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JUnit Jupiter Engine: For running tests -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>${junit.jupiter.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Maven Compiler Plugin: Configures Java version for compilation -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven.compiler.plugin.version}</version>
+                <configuration>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
+                </configuration>
+            </plugin>
+            <!-- Maven Surefire Plugin: Used for running JUnit tests -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${maven.surefire.plugin.version}</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>
