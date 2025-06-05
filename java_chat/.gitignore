@@ -1,0 +1,24 @@
+# Local configuration files
+src/main/resources/config.properties
+
+# Maven build output
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+RELEASE.txt
+*.ids
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+.DS_Store
+
+# Log files
+*.log
+logs/

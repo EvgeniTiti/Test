@@ -9,17 +9,22 @@ import io.lettuce.core.api.sync.RedisCommands;
 import com.redislabs.modules.rejson.JReJSON;
 // JRediSearch client
 import com.redislabs.client.rediSearch.Client; // The client for RediSearch
-import com.redislabs.client.rediSearch.SearchOptions;
-import com.redislabs.client.rediSearch.SearchResult;
-import com.redislabs.client.rediSearch.Schema;
-import com.redislabs.client.rediSearch.query.Query;
+// Note: SearchOptions, SearchResult, Schema, Query are not directly used in RedisManager connection setup
+// but would be used in the search methods. Keep them for when those methods are implemented.
+// import com.redislabs.client.rediSearch.SearchOptions;
+// import com.redislabs.client.rediSearch.SearchResult;
+// import com.redislabs.client.rediSearch.Schema;
+// import com.redislabs.client.rediSearch.query.Query;
 
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -28,76 +33,137 @@ import java.util.function.Consumer;
  * This class encapsulates the setup and management of Redis connections and provides
  * methods to perform various Redis operations related to chat functionalities,
  * including core Redis commands, Redis Streams, RedisJSON, and RediSearch.
+ * Connection details are loaded from a `config.properties` file.
  */
 public class RedisManager implements AutoCloseable {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisManager.class);
 
-    private final String redisHost;
-    private final int redisPort;
+    // Default Redis connection details
+    private static final String DEFAULT_REDIS_HOST = "localhost";
+    private static final int DEFAULT_REDIS_PORT = 6379;
+    private static final String DEFAULT_REDIS_PASSWORD = null; // Or ""
+
+    // Configuration properties
+    private String redisHost;
+    private int redisPort;
+    private String redisPassword;
+
 
     // Lettuce Redis Client and Connection
     private RedisClient lettuceClient;
-    private StatefulRedisConnection<String, String> lettuceConnection;
-    private RedisCommands<String, String> syncCommands; // For general and stream commands
+    private transient StatefulRedisConnection<String, String> lettuceConnection; // Marked transient if serialization is a concern
+    private transient RedisCommands<String, String> syncCommands; // For general and stream commands
 
     // JRedisJSON Client (uses its own connection management, typically Jedis based)
-    private JReJSON jsonClient;
+    private transient JReJSON jsonClient;
 
     // JRediSearch Client (uses its own connection management, typically Jedis based)
-    private Client searchClient; // com.redislabs.client.rediSearch.Client
+    private transient Client searchClient; // com.redislabs.client.rediSearch.Client
     public static final String CHAT_MESSAGE_INDEX_NAME = "idx:chat_messages_java";
 
 
     /**
-     * Constructs a RedisManager and initializes connections to Redis.
-     *
-     * @param host The hostname or IP address of the Redis server.
-     * @param port The port number of the Redis server.
+     * Constructs a RedisManager.
+     * It loads Redis connection details from `config.properties` found in the classpath.
+     * If the file or specific properties are not found, defaults are used.
+     * After loading configuration, it initializes connections to Redis and its modules.
      */
-    public RedisManager(String host, int port) {
-        this.redisHost = host;
-        this.redisPort = port;
+    public RedisManager() {
+        loadConfiguration();
         init();
     }
 
     /**
-     * Initializes the Redis client, connections, and module-specific clients.
+     * Loads Redis connection configuration from `config.properties` file.
+     * Sets redisHost, redisPort, and redisPassword fields based on the file content
+     * or defaults if the file/properties are not found or invalid.
+     */
+    private void loadConfiguration() {
+        Properties props = new Properties();
+        try (InputStream input = RedisManager.class.getClassLoader().getResourceAsStream("config.properties")) {
+            if (input == null) {
+                logger.warn("config.properties file not found in classpath. Using default Redis connection settings.");
+                this.redisHost = DEFAULT_REDIS_HOST;
+                this.redisPort = DEFAULT_REDIS_PORT;
+                this.redisPassword = DEFAULT_REDIS_PASSWORD;
+                return;
+            }
+            props.load(input);
+            this.redisHost = props.getProperty("redis.host", DEFAULT_REDIS_HOST);
+            // Parse port with error handling and fallback
+            try {
+                this.redisPort = Integer.parseInt(props.getProperty("redis.port", String.valueOf(DEFAULT_REDIS_PORT)));
+            } catch (NumberFormatException e) {
+                logger.warn("Invalid format for redis.port in config.properties. Using default port {}.", DEFAULT_REDIS_PORT, e);
+                this.redisPort = DEFAULT_REDIS_PORT;
+            }
+            this.redisPassword = props.getProperty("redis.password", DEFAULT_REDIS_PASSWORD);
+            if (this.redisPassword != null && this.redisPassword.isEmpty()) {
+                this.redisPassword = null; // Treat empty password as no password
+            }
+            logger.info("Loaded Redis configuration: host='{}', port={}, password_provided={}",
+                        this.redisHost, this.redisPort, (this.redisPassword != null && !this.redisPassword.isEmpty()));
+
+        } catch (IOException e) {
+            logger.warn("Error loading config.properties. Using default Redis connection settings.", e);
+            this.redisHost = DEFAULT_REDIS_HOST;
+            this.redisPort = DEFAULT_REDIS_PORT;
+            this.redisPassword = DEFAULT_REDIS_PASSWORD;
+        }
+    }
+
+
+    /**
+     * Initializes the Redis client, connections, and module-specific clients
+     * using the loaded configuration (host, port, password).
      * This method sets up:
      * 1. Lettuce client for core Redis operations and Streams.
      * 2. JRedisJSON client for interacting with the RedisJSON module.
      * 3. JRediSearch client for interacting with the RediSearch module.
+     *
+     * @throws RuntimeException if initialization of essential Redis connections fails.
      */
     private void init() {
         try {
             // 1. Initialize Lettuce Client and Connection
-            logger.info("Connecting to Redis (Lettuce) at {}:{}...", redisHost, redisPort);
-            RedisURI redisURI = RedisURI.builder().withHost(redisHost).withPort(redisPort).build();
+            logger.info("Connecting to Redis (Lettuce) at {}:{}...", this.redisHost, this.redisPort);
+            RedisURI.Builder uriBuilder = RedisURI.builder().withHost(this.redisHost).withPort(this.redisPort);
+            if (this.redisPassword != null && !this.redisPassword.isEmpty()) {
+                uriBuilder.withPassword(this.redisPassword.toCharArray());
+            }
+            RedisURI redisURI = uriBuilder.build();
+
             this.lettuceClient = RedisClient.create(redisURI);
             this.lettuceConnection = this.lettuceClient.connect();
             this.syncCommands = this.lettuceConnection.sync(); // Synchronous commands
             logger.info("Lettuce connection to Redis established successfully.");
 
             // 2. Initialize JRedisJSON Client
-            // JReJSON typically uses JedisPool for connection.
-            logger.info("Initializing JRedisJSON client for {}:{}...", redisHost, redisPort);
-            this.jsonClient = new JReJSON(redisHost, redisPort);
+            logger.info("Initializing JRedisJSON client for {}:{}...", this.redisHost, this.redisPort);
+            // JReJSON constructor using host/port. If Redis requires auth, JReJSON might fail if it
+            // doesn't inherit auth context or if the server is strict.
+            // For password protected Redis, a JedisPool configured with password should be passed to JReJSON.
+            // This is a simplification for now.
+            this.jsonClient = new JReJSON(this.redisHost, this.redisPort);
+            if (this.redisPassword != null && !this.redisPassword.isEmpty()) {
+                 logger.warn("JRedisJSON client initialized with host/port. Password authentication might not be directly supported " +
+                             "by this JReJSON constructor. Consider using a password-configured JedisPool with JReJSON if issues arise.");
+            }
             logger.info("JRedisJSON client initialized successfully.");
 
 
             // 3. Initialize JRediSearch Client
-            // The `Client` from com.redislabs.client.rediSearch takes index name, host, port.
-            logger.info("Initializing JRediSearch client for {}:{} and index '{}'...", redisHost, redisPort, CHAT_MESSAGE_INDEX_NAME);
-            // Note: The index name is passed at client creation for JRediSearch, implying this client instance
-            // might be tied to a specific index, or it's a default. The methods later also take index name.
-            // We will use a default index name here and ensure it's created by createChatMessageIndex.
-            this.searchClient = new Client(CHAT_MESSAGE_INDEX_NAME, redisHost, redisPort);
+            logger.info("Initializing JRediSearch client for {}:{} and index '{}'...", this.redisHost, this.redisPort, CHAT_MESSAGE_INDEX_NAME);
+            // The JRediSearch Client constructor can take password.
+            // Using default timeout (500ms) and no specific pool (null).
+            this.searchClient = new Client(CHAT_MESSAGE_INDEX_NAME, this.redisHost, this.redisPort, 500, this.redisPassword);
             logger.info("JRediSearch client initialized successfully.");
 
         } catch (Exception e) {
-            logger.error("Failed to initialize RedisManager and connect to Redis or its modules.", e);
-            // Depending on the application's needs, this could throw a runtime exception
-            // to prevent the app from starting in a dysfunctional state.
+            logger.error("Failed to initialize RedisManager and connect to Redis or its modules using config: host={}, port={}.",
+                         this.redisHost, this.redisPort, e);
+            // This exception is critical for the application's ability to function.
             throw new RuntimeException("Could not initialize RedisManager: " + e.getMessage(), e);
         }
     }

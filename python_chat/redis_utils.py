@@ -17,6 +17,8 @@ and enabled for functionalities that depend on them.
 
 # Standard library imports
 import datetime
+import configparser
+import os # For path handling
 
 # Third-party imports
 try:
@@ -35,33 +37,83 @@ except ImportError:
 
 # --- Connection Management ---
 
-def connect_to_redis(host="localhost", port=6379, db=0):
+# Define the expected path for the configuration file, relative to this script file.
+# Assumes config.ini is in the same directory as redis_utils.py (which is python_chat/)
+CONFIG_FILE_PATH = os.path.join(os.path.dirname(__file__), 'config.ini')
+
+
+def connect_to_redis(db=0):
     """
     Connects to a Redis instance and verifies the connection.
+    Connection details (host, port, password) are read from 'config.ini' located
+    in the same directory as this script. If the file or specific settings are
+    not found, it falls back to default values (localhost:6379, no password).
 
     Args:
-        host (str, optional): The Redis host. Defaults to "localhost".
-        port (int, optional): The Redis port. Defaults to 6379.
-        db (int, optional): The Redis database number. Defaults to 0.
+        db (int, optional): The Redis database number to connect to. Defaults to 0.
 
     Returns:
         redis.Redis or None: A Redis connection object if the connection is successful,
                              None otherwise.
     """
     if not redis:
-        print("Redis client (redis-py) is not available. Cannot connect.")
+        print("[ERROR] Redis client (redis-py) is not available. Cannot connect.")
         return None
+
+    config = configparser.ConfigParser()
+    host = 'localhost'
+    port = 6379
+    password = None
+
     try:
-        # decode_responses=True ensures that strings are returned from Redis, not bytes.
-        r = redis.Redis(host=host, port=port, db=db, decode_responses=True)
+        # Attempt to read the configuration file.
+        # read() returns a list of successfully read files. If empty, config was not read.
+        if not config.read(CONFIG_FILE_PATH):
+            print(f"[WARN] Configuration file '{CONFIG_FILE_PATH}' not found or empty. Using default Redis connection settings.")
+        else:
+            if 'Redis' in config:
+                host = config.get('Redis', 'host', fallback='localhost')
+                port = config.getint('Redis', 'port', fallback=6379) # getint handles conversion
+                password_from_config = config.get('Redis', 'password', fallback=None)
+
+                if password_from_config and password_from_config.strip():
+                    password = password_from_config
+                else:
+                    password = None # Ensure empty string is treated as no password
+
+                print(f"[INFO] Loaded Redis configuration from '{CONFIG_FILE_PATH}': host={host}, port={port}, password_provided={'yes' if password else 'no'}.")
+            else:
+                print(f"[WARN] '[Redis]' section not found in '{CONFIG_FILE_PATH}'. Using default Redis connection settings.")
+    except configparser.Error as e:
+        print(f"[WARN] Error parsing configuration file '{CONFIG_FILE_PATH}': {e}. Using default Redis connection settings.")
+    except Exception as e: # Catch other potential errors during config loading, like incorrect types for fallback
+        print(f"[WARN] An unexpected error occurred while reading Redis config: {e}. Using default settings.")
+
+
+    try:
+        # Prepare connection arguments for redis.Redis()
+        connection_params = {
+            'host': host,
+            'port': port,
+            'db': db,
+            'decode_responses': True # Ensures strings are returned, not bytes.
+        }
+        if password:
+            connection_params['password'] = password
+
+        # decode_responses=True is important for commands returning strings/bytes
+        r = redis.Redis(**connection_params)
         r.ping()  # Check if the connection is alive and working.
-        print(f"Successfully connected to Redis at {host}:{port}, db {db}")
+        print(f"[INFO] Successfully connected to Redis at {host}:{port}, db {db}")
         return r
-    except redis.exceptions.ConnectionError as e:
-        print(f"Could not connect to Redis at {host}:{port}, db {db}: {e}")
+    except redis.exceptions.AuthenticationError as e:
+        print(f"[ERROR] Redis authentication failed for {host}:{port}, db {db}. Check password. Error: {e}")
         return None
-    except Exception as e:  # Catch other potential exceptions during connection.
-        print(f"An error occurred during Redis connection to {host}:{port}, db {db}: {e}")
+    except redis.exceptions.ConnectionError as e:
+        print(f"[ERROR] Could not connect to Redis at {host}:{port}, db {db}: {e}")
+        return None
+    except Exception as e:  # Catch other potential redis-py exceptions
+        print(f"[ERROR] An error occurred during Redis connection to {host}:{port}, db {db}: {e}")
         return None
 
 # --- Stream Naming Conventions ---

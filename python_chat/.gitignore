@@ -1,0 +1,7 @@
+# Local configuration files
+config.ini
+
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc

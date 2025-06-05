@@ -51,6 +51,39 @@ This project is divided into two main modules:
 (Further details on setup and usage for each application will be provided below.)
 ---
 
+## Redis Connection Configuration
+
+To connect to your Redis instance, both the Python and Java applications use external configuration files. This allows you to specify your Redis server's host, port, and password without hardcoding them into the source code. Example configuration files are provided, which you should copy and customize. The actual configuration files containing your local details are ignored by Git.
+
+### Python Application (`python_chat/`)
+
+*   An example configuration file is provided at `python_chat/config.example.ini`.
+*   **Action:** Copy `python_chat/config.example.ini` to `python_chat/config.ini`.
+*   Edit `python_chat/config.ini` with your Redis server details.
+    ```ini
+    [Redis]
+    host = your_redis_host
+    port = your_redis_port
+    password = your_redis_password_if_any
+    ```
+*   The `config.ini` file is listed in `python_chat/.gitignore` and should not be committed to version control.
+
+### Java Application (`java_chat/`)
+
+*   An example configuration file is provided at `java_chat/src/main/resources/config.example.properties`.
+*   **Action:** Copy `java_chat/src/main/resources/config.example.properties` to `java_chat/src/main/resources/config.properties`.
+*   Edit `java_chat/src/main/resources/config.properties` with your Redis server details.
+    ```properties
+    redis.host=your_redis_host
+    redis.port=your_redis_port
+    redis.password=your_redis_password_if_any
+    ```
+*   The `config.properties` file (when placed in `src/main/resources/`) is listed in `java_chat/.gitignore` and should not be committed to version control.
+
+**Important:** Always ensure your local `config.ini` and `config.properties` files containing potentially sensitive information are not committed to your repository.
+
+---
+
 ## Python Chat Application (`python_chat/`)
 
 This section details how to set up and run the Python chat application.
@@ -62,6 +95,8 @@ This section details how to set up and run the Python chat application.
     *   Redis version 6.x or higher.
     *   Ensure the **RedisJSON** and **RediSearch** modules are installed and loaded on your Redis server.
     *   You can typically check loaded modules with the Redis command `MODULE LIST`.
+    *   Configure connection details as described in the "Redis Connection Configuration" section.
+
 
 ### Setup & Installation
 
@@ -97,7 +132,7 @@ The Python application (`app.py`) demonstrates various flows such as user manage
 
 **General Steps:**
 
-1.  **Ensure your Redis server is running** and accessible. The application connects to `redis://localhost:6379` by default. This can be changed in `python_chat/redis_utils.py`.
+1.  **Ensure your Redis server is running** and accessible, and that you have created and configured `python_chat/config.ini` as per the "Redis Connection Configuration" section.
 2.  **Open the `python_chat/app.py` file.**
 3.  **Modify the `main()` function** to call the specific flow you want to test (e.g., `send_chat_message_flow_differentiated()`, `receive_chat_messages_flow_differentiated()`, `search_messages_flow()`).
     *   For example, to run the message receiving flow:
@@ -147,6 +182,7 @@ This section details how to set up and run the Java chat application.
     *   Redis version 6.x or higher.
     *   Ensure the **RedisJSON** and **RediSearch** modules are installed and loaded on your Redis server.
     *   You can typically check loaded modules with the Redis command `MODULE LIST`.
+    *   Configure connection details as described in the "Redis Connection Configuration" section by creating `java_chat/src/main/resources/config.properties`.
 
 ### Setup & Building
 
@@ -163,7 +199,7 @@ This section details how to set up and run the Java chat application.
 
 ### Running the Application
 
-1.  **Ensure your Redis server is running** and accessible. The application connects to `redis://localhost:6379` by default. This is configured in `java_chat/src/main/java/com/example/chat/RedisManager.java`.
+1.  **Ensure your Redis server is running** and accessible, and that you have created and configured `java_chat/src/main/resources/config.properties` as per the "Redis Connection Configuration" section.
 
 2.  **Run the application using the `exec:java` Maven plugin** (or by directly executing the JAR):
     *   **Using Maven:**
@@ -176,7 +212,7 @@ This section details how to set up and run the Java chat application.
         ```
         (Ensure the JAR is executable and the main class is correctly specified in `pom.xml`'s `maven-jar-plugin` if you encounter issues with the latter method).
 
-Currently, running `ChatApp` will initialize the `RedisManager`, attempt to connect to Redis, and then cleanly shut down. As more features (like message sending/receiving flows) are implemented in `ChatApp.java` and `RedisManager.java`, this section will be updated with more specific operational instructions.
+Currently, running `ChatApp` will initialize the `RedisManager`, attempt to connect to Redis using details from `config.properties` (or defaults if the file is missing/invalid), and then cleanly shut down. As more features (like message sending/receiving flows) are implemented in `ChatApp.java` and `RedisManager.java`, this section will be updated with more specific operational instructions.
 ---
 
 ## Redis Data Structures Utilized
